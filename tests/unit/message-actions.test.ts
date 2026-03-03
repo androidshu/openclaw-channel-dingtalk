@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendMessageMock, sendProactiveMediaMock, detectMediaTypeFromExtensionMock } = vi.hoisted(() => ({
+const { sendMessageMock, sendProactiveMediaMock } = vi.hoisted(() => ({
     sendMessageMock: vi.fn(),
     sendProactiveMediaMock: vi.fn(),
-    detectMediaTypeFromExtensionMock: vi.fn(),
 }));
 
 vi.mock('openclaw/plugin-sdk', () => ({
@@ -47,7 +46,6 @@ vi.mock('dingtalk-stream', () => ({
 }));
 
 vi.mock('../../src/send-service', async () => ({
-    detectMediaTypeFromExtension: detectMediaTypeFromExtensionMock,
     sendMessage: sendMessageMock,
     sendProactiveMedia: sendProactiveMediaMock,
     sendBySession: vi.fn(),
@@ -62,7 +60,6 @@ describe('dingtalkPlugin.actions.send', () => {
     beforeEach(() => {
         sendMessageMock.mockReset();
         sendProactiveMediaMock.mockReset();
-        detectMediaTypeFromExtensionMock.mockReset();
     });
 
     it('forces voice mediaType when asVoice=true with media input', async () => {
@@ -74,7 +71,7 @@ describe('dingtalkPlugin.actions.send', () => {
             cfg: cfg as any,
             params: {
                 to: 'cidA1B2C3',
-                media: '/tmp/audio.mp4',
+                media: '/tmp/audio.mp3',
                 asVoice: true,
             },
             accountId: 'default',
@@ -84,10 +81,30 @@ describe('dingtalkPlugin.actions.send', () => {
         expect(sendProactiveMediaMock).toHaveBeenCalledWith(
             expect.any(Object),
             'cidA1B2C3',
-            '/tmp/audio.mp4',
+            '/tmp/audio.mp3',
             'voice',
             expect.objectContaining({ accountId: 'default' })
         );
+        expect(sendMessageMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects asVoice when media input is not an audio file', async () => {
+        await expect(
+            dingtalkPlugin.actions?.handleAction?.({
+                channel: 'dingtalk',
+                action: 'send',
+                cfg: cfg as any,
+                params: {
+                    to: 'cidA1B2C3',
+                    media: '/tmp/not-audio.pdf',
+                    asVoice: true,
+                },
+                accountId: 'default',
+                dryRun: false,
+            } as any),
+        ).rejects.toThrow(/requires an audio file/i);
+
+        expect(sendProactiveMediaMock).not.toHaveBeenCalled();
         expect(sendMessageMock).not.toHaveBeenCalled();
     });
 

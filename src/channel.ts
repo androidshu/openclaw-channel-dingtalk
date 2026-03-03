@@ -13,16 +13,10 @@ import { ConnectionManager } from "./connection-manager";
 import { isMessageProcessed, markMessageProcessed } from "./dedup";
 import { handleDingTalkMessage } from "./inbound-handler";
 import { getLogger } from "./logger-context";
-import { prepareMediaInput } from "./media-utils";
+import { prepareMediaInput, resolveOutboundMediaType } from "./media-utils";
 import { dingtalkOnboardingAdapter } from "./onboarding.js";
 import { resolveOriginalPeerId } from "./peer-id-registry";
-import {
-  detectMediaTypeFromExtension,
-  sendMessage,
-  sendProactiveMedia,
-  sendBySession,
-  uploadMedia,
-} from "./send-service";
+import { sendMessage, sendProactiveMedia, sendBySession, uploadMedia } from "./send-service";
 import type {
   DingTalkInboundMessage,
   GatewayStartContext,
@@ -75,22 +69,6 @@ function logInboundCounters(log: any, accountId: string, reason: string): void {
   );
 }
 
-type DingTalkOutboundMediaType = "image" | "voice" | "video" | "file";
-
-function normalizeOutboundMediaType(value?: string | null): DingTalkOutboundMediaType | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "image" || normalized === "voice" || normalized === "video" || normalized === "file") {
-    return normalized;
-  }
-
-  return undefined;
-}
-
-
 function readBooleanLikeParam(params: Record<string, unknown>, key: string): boolean | undefined {
   const value = params[key];
   if (typeof value === "boolean") {
@@ -115,23 +93,6 @@ function readBooleanLikeParam(params: Record<string, unknown>, key: string): boo
     }
   }
   return undefined;
-}
-
-function resolveSendMediaType(params: {
-  mediaType?: string | null;
-  mediaPath: string;
-  asVoice: boolean;
-}): DingTalkOutboundMediaType {
-  if (params.asVoice) {
-    return "voice";
-  }
-
-  const explicitType = normalizeOutboundMediaType(params.mediaType);
-  if (explicitType) {
-    return explicitType;
-  }
-
-  return detectMediaTypeFromExtension(params.mediaPath);
 }
 
 const dingtalkMessageActions: ChannelMessageActionAdapter = {
@@ -182,7 +143,7 @@ const dingtalkMessageActions: ChannelMessageActionAdapter = {
 
     if (hasMedia && mediaInput) {
       const mediaPath = resolveRelativePath(mediaInput);
-      const mediaType = resolveSendMediaType({
+      const mediaType = resolveOutboundMediaType({
         mediaType: requestedMediaType ?? undefined,
         mediaPath,
         asVoice,
@@ -419,7 +380,7 @@ export const dingtalkPlugin: DingTalkChannelPlugin = {
           `[DingTalk] sendMedia resolved path: rawMediaPath=${rawMediaPath}, actualMediaPath=${actualMediaPath}`,
         );
 
-        const mediaType = resolveSendMediaType({
+        const mediaType = resolveOutboundMediaType({
           mediaType: typeof providedMediaType === "string" ? providedMediaType : undefined,
           mediaPath: actualMediaPath,
           asVoice: asVoice === true,
