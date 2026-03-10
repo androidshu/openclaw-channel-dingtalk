@@ -61,12 +61,28 @@ export interface DingTalkConfig extends OpenClawConfig {
   useConnectionManager?: boolean;
   /** Maximum inbound media file size in MB (overrides runtime default when set) */
   mediaMaxMb?: number;
+  /** Whether to enable underlying stream keepAlive heartbeat; defaults to !useConnectionManager when omitted */
+  keepAlive?: boolean;
+  /** Bypass system/global HTTP(S) proxy for DingTalk outbound send/card/upload APIs */
+  bypassProxyForSend?: boolean;
   proactivePermissionHint?: {
     enabled?: boolean;
     cooldownHours?: number;
   };
   /** AICard degrade duration in milliseconds after trigger errors (default 30m) */
   aicardDegradeMs?: number;
+  /** Enable local learning loop (events/reflections/session notes/global rules) */
+  learningEnabled?: boolean;
+  /** Auto-apply generated reflections into session notes/global rules (default false) */
+  learningAutoApply?: boolean;
+  /** Session learning note TTL in milliseconds (default 6h) */
+  learningNoteTtlMs?: number;
+  /** @deprecated Use learningEnabled */
+  feedbackLearningEnabled?: boolean;
+  /** @deprecated Use learningAutoApply */
+  feedbackLearningAutoApply?: boolean;
+  /** @deprecated Use learningNoteTtlMs */
+  feedbackLearningNoteTtlMs?: number;
 }
 
 /**
@@ -102,12 +118,28 @@ export interface DingTalkChannelConfig {
   useConnectionManager?: boolean;
   /** Maximum inbound media file size in MB (overrides runtime default when set) */
   mediaMaxMb?: number;
+  /** Whether to enable underlying stream keepAlive heartbeat; defaults to !useConnectionManager when omitted */
+  keepAlive?: boolean;
+  /** Bypass system/global HTTP(S) proxy for DingTalk outbound send/card/upload APIs */
+  bypassProxyForSend?: boolean;
   proactivePermissionHint?: {
     enabled?: boolean;
     cooldownHours?: number;
   };
   /** AICard degrade duration in milliseconds after trigger errors (default 30m) */
   aicardDegradeMs?: number;
+  /** Enable local learning loop (events/reflections/session notes/global rules) */
+  learningEnabled?: boolean;
+  /** Auto-apply generated reflections into session notes/global rules (default false) */
+  learningAutoApply?: boolean;
+  /** Session learning note TTL in milliseconds (default 6h) */
+  learningNoteTtlMs?: number;
+  /** @deprecated Use learningEnabled */
+  feedbackLearningEnabled?: boolean;
+  /** @deprecated Use learningAutoApply */
+  feedbackLearningAutoApply?: boolean;
+  /** @deprecated Use learningNoteTtlMs */
+  feedbackLearningNoteTtlMs?: number;
 }
 
 /**
@@ -245,7 +277,9 @@ export interface QuotedInfo {
 export interface MessageContent {
   text: string;
   mediaPath?: string;
+  mediaPaths?: string[];
   mediaType?: string;
+  mediaTypes?: string[];
   messageType: string;
   docSpaceId?: string;
   docFileId?: string;
@@ -627,8 +661,15 @@ export function resolveDingTalkAccount(
       maxReconnectCycles: dingtalk?.maxReconnectCycles,
       useConnectionManager: dingtalk?.useConnectionManager,
       mediaMaxMb: dingtalk?.mediaMaxMb,
+      bypassProxyForSend: dingtalk?.bypassProxyForSend,
       proactivePermissionHint: dingtalk?.proactivePermissionHint,
       aicardDegradeMs: dingtalk?.aicardDegradeMs,
+      learningEnabled: dingtalk?.learningEnabled ?? dingtalk?.feedbackLearningEnabled,
+      learningAutoApply: dingtalk?.learningAutoApply ?? dingtalk?.feedbackLearningAutoApply,
+      learningNoteTtlMs: dingtalk?.learningNoteTtlMs ?? dingtalk?.feedbackLearningNoteTtlMs,
+      feedbackLearningEnabled: dingtalk?.feedbackLearningEnabled,
+      feedbackLearningAutoApply: dingtalk?.feedbackLearningAutoApply,
+      feedbackLearningNoteTtlMs: dingtalk?.feedbackLearningNoteTtlMs,
     };
     return {
       ...config,
