@@ -19,6 +19,8 @@ const shared = vi.hoisted(() => ({
     formatContentForCardMock: vi.fn((s: string) => s),
     isCardInTerminalStateMock: vi.fn(),
     acquireSessionLockMock: vi.fn(),
+    appendQuoteJournalEntryMock: vi.fn(),
+    resolveQuotedMessageByIdMock: vi.fn(),
 }));
 
 vi.mock('axios', () => ({
@@ -58,6 +60,12 @@ vi.mock('../../src/card-service', () => ({
 
 vi.mock('../../src/session-lock', () => ({
     acquireSessionLock: shared.acquireSessionLockMock,
+}));
+
+vi.mock('../../src/quote-journal', () => ({
+    DEFAULT_JOURNAL_TTL_DAYS: 7,
+    appendQuoteJournalEntry: shared.appendQuoteJournalEntryMock,
+    resolveQuotedMessageById: shared.resolveQuotedMessageByIdMock,
 }));
 
 vi.mock('../../src/quoted-file-service', () => ({
@@ -139,6 +147,10 @@ describe('inbound-handler', () => {
 
         shared.acquireSessionLockMock.mockReset();
         shared.acquireSessionLockMock.mockResolvedValue(vi.fn());
+        shared.appendQuoteJournalEntryMock.mockReset();
+        shared.appendQuoteJournalEntryMock.mockReturnValue(undefined);
+        shared.resolveQuotedMessageByIdMock.mockReset();
+        shared.resolveQuotedMessageByIdMock.mockReturnValue(null);
 
         shared.getRuntimeMock.mockReturnValue(buildRuntime());
         shared.extractMessageContentMock.mockReturnValue({ text: 'hello', messageType: 'text' });
@@ -2099,6 +2111,88 @@ describe('inbound-handler', () => {
         } as any);
 
         expect(shared.sendBySessionMock).not.toHaveBeenCalled();
+    });
+
+    it('matches proactive permission hint risk using senderOriginalId when senderStaffId is present', async () => {
+        recordProactiveRiskObservation({
+            accountId: 'main',
+            targetId: 'raw_sender_1',
+            level: 'high',
+            reason: 'Forbidden.AccessDenied.AccessTokenPermissionDenied',
+            source: 'proactive-api',
+        });
+        shared.sendBySessionMock.mockResolvedValue(undefined);
+
+        await handleDingTalkMessage({
+            cfg: {},
+            accountId: 'main',
+            sessionWebhook: 'https://session.webhook',
+            log: undefined,
+            dingtalkConfig: {
+                dmPolicy: 'open',
+                messageType: 'markdown',
+                showThinking: false,
+                proactivePermissionHint: { enabled: true, cooldownHours: 24 },
+            } as any,
+            data: {
+                msgId: 'm11_raw_id',
+                msgtype: 'text',
+                text: { content: 'hello' },
+                conversationType: '1',
+                conversationId: 'cid_ok',
+                senderId: 'raw_sender_1',
+                senderStaffId: 'staff_sender_1',
+                chatbotUserId: 'bot_1',
+                sessionWebhook: 'https://session.webhook',
+                createAt: Date.now(),
+            },
+        } as any);
+
+        expect(shared.sendBySessionMock).toHaveBeenCalledTimes(1);
+        expect(String(shared.sendBySessionMock.mock.calls[0]?.[2])).toContain('主动推送可能失败');
+    });
+
+    it('injects group turn context prompt with authoritative sender metadata', async () => {
+        const runtime = buildRuntime();
+        shared.getRuntimeMock.mockReturnValueOnce(runtime);
+
+        await handleDingTalkMessage({
+            cfg: {},
+            accountId: 'main',
+            sessionWebhook: 'https://session.webhook',
+            log: undefined,
+            dingtalkConfig: { groupPolicy: 'open', messageType: 'markdown', showThinking: false } as any,
+            data: {
+                msgId: 'm_group_turn_ctx',
+                msgtype: 'text',
+                text: { content: 'hello group' },
+                conversationType: '2',
+                conversationId: 'cid_group_ctx',
+                conversationTitle: 'Dev Group',
+                senderId: 'raw_sender_1',
+                senderStaffId: 'staff_sender_1',
+                senderNick: 'Alice',
+                chatbotUserId: 'bot_1',
+                sessionWebhook: 'https://session.webhook',
+                createAt: Date.now(),
+            },
+        } as any);
+
+        expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
+            expect.objectContaining({
+                GroupSystemPrompt: expect.stringContaining('Current DingTalk group turn context:'),
+            }),
+        );
+        expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
+            expect.objectContaining({
+                GroupSystemPrompt: expect.stringContaining('senderDingtalkId: staff_sender_1'),
+            }),
+        );
+        expect(runtime.channel.reply.finalizeInboundContext).toHaveBeenCalledWith(
+            expect.objectContaining({
+                GroupSystemPrompt: expect.stringContaining('senderName: Alice'),
+            }),
+        );
     });
 
     it('concurrent messages create independent cards with distinct IDs', async () => {
